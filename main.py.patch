@@ -1,0 +1,152 @@
+import os
+import sys
+import logging
+from typing import Dict, List, Any, Optional
+import datetime
+import json
+import uuid
+
+# Add basic contract processing function
+def process_contract_basic(self, file_content: bytes, filename: str) -> Dict[str, Any]:
+    """
+    Process a contract document with basic functionality (no OpenAI required).
+    
+    Args:
+        file_content: Binary content of the uploaded file
+        filename: Name of the uploaded file
+        
+    Returns:
+        Dictionary with extraction results
+    """
+    logger = logging.getLogger("dora_assessment")
+    logger.info(f"Processing contract using basic mode: {filename}")
+    
+    # Extract file extension
+    ext = filename.split('.')[-1].lower()
+    
+    # Basic extraction without AI
+    extracted_text = ""
+    
+    try:
+        # Process PDF
+        if ext == 'pdf':
+            import pdfplumber
+            import io
+            
+            with pdfplumber.open(io.BytesIO(file_content)) as pdf:
+                for page in pdf.pages:
+                    extracted_text += page.extract_text() or ""
+        
+        # Process DOCX
+        elif ext == 'docx':
+            import docx
+            import io
+            
+            doc = docx.Document(io.BytesIO(file_content))
+            for para in doc.paragraphs:
+                extracted_text += para.text + "\n"
+        
+        else:
+            return {
+                "error": f"Unsupported file format: {ext}",
+                "status": "error"
+            }
+        
+        # Basic parsing with simple keyword search
+        clauses = {
+            "exit_strategy": [],
+            "sub_outsourcing": [],
+            "service_levels": [],
+            "audit_rights": [],
+            "data_protection": []
+        }
+        
+        # Simple keyword-based extraction
+        paragraphs = extracted_text.split('\n\n')
+        
+        for i, para in enumerate(paragraphs):
+            para_lower = para.lower()
+            
+            # Exit strategy
+            if any(keyword in para_lower for keyword in ["exit", "termination", "transition"]):
+                clauses["exit_strategy"].append({
+                    "text": para,
+                    "source": f"Page {i//10 + 1}",
+                    "dora_requirements": ["Exit planning", "Transition arrangements"]
+                })
+            
+            # Sub-outsourcing
+            if any(keyword in para_lower for keyword in ["subcontract", "sub-contract", "subprovider", "third party"]):
+                clauses["sub_outsourcing"].append({
+                    "text": para,
+                    "source": f"Page {i//10 + 1}",
+                    "dora_requirements": ["Sub-outsourcing approval", "Chain monitoring"]
+                })
+            
+            # Service levels
+            if any(keyword in para_lower for keyword in ["sla", "service level", "performance"]):
+                clauses["service_levels"].append({
+                    "text": para,
+                    "source": f"Page {i//10 + 1}",
+                    "dora_requirements": ["Service metrics", "Performance monitoring"]
+                })
+            
+            # Audit rights
+            if any(keyword in para_lower for keyword in ["audit", "inspect", "examination"]):
+                clauses["audit_rights"].append({
+                    "text": para,
+                    "source": f"Page {i//10 + 1}",
+                    "dora_requirements": ["Audit rights", "Information access"]
+                })
+            
+            # Data protection
+            if any(keyword in para_lower for keyword in ["data", "privacy", "gdpr", "personal information"]):
+                clauses["data_protection"].append({
+                    "text": para,
+                    "source": f"Page {i//10 + 1}",
+                    "dora_requirements": ["Data location", "Processing restrictions"]
+                })
+        
+        # Generate basic compliance assessment
+        compliance_results = {
+            "overall_compliance": 0.5,  # Default to 50% without AI analysis
+            "article_compliance": {
+                "DORA Article 28": {"compliance_score": 0.5},
+                "DORA Article 29": {"compliance_score": 0.5},
+                "DORA Article 30": {"compliance_score": 0.5}
+            },
+            "gaps": [
+                {"article": "DORA Article 30", "requirement": "Cannot perform detailed gap analysis without AI capabilities"}
+            ],
+            "recommendations": [
+                {"article": "General", "recommendation": "Enable OpenAI API for full contract analysis capabilities"}
+            ]
+        }
+        
+        # Count found clauses to adjust compliance score
+        found_clauses = sum(1 for category in clauses.values() if len(category) > 0)
+        if found_clauses >= 4:
+            compliance_results["overall_compliance"] = 0.7
+        elif found_clauses <= 1:
+            compliance_results["overall_compliance"] = 0.3
+            
+        # Return results
+        return {
+            "extracted_text": extracted_text[:1000] + "...",  # Truncated for UI display
+            "extracted_clauses": clauses,
+            "compliance_results": compliance_results,
+            "clause_evaluation": {
+                category: {
+                    "fulfilled_requirements": [],
+                    "gaps": ["Full evaluation requires OpenAI API"]
+                } for category in clauses
+            },
+            "status": "success"
+        }
+    
+    except Exception as e:
+        logger.error(f"Error in basic contract processing: {str(e)}")
+        return {
+            "error": f"Error processing document: {str(e)}",
+            "status": "error"
+        }
